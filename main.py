@@ -1,9 +1,10 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 import yt_dlp
 from yt_dlp.networking.impersonate import ImpersonateTarget
+from curl_cffi.requests import AsyncSession
 import os
 import uuid
 
@@ -90,38 +91,53 @@ async def get_qualities(req: VideoRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/download")
-async def download_video(url: str, format_id: str, background_tasks: BackgroundTasks):
-    os.makedirs("downloads", exist_ok=True)
-    file_id = str(uuid.uuid4())
-    outtmpl = f"downloads/{file_id}.%(ext)s"
-    
+async def download_video(url: str, format_id: str):
     ydl_opts = {
-        'format': format_id,
-        'outtmpl': outtmpl,
+        'skip_download': True,
         'quiet': True,
         'impersonate': ImpersonateTarget.from_str('chrome'),
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+            # Extract info but DO NOT download yet
+            info = ydl.extract_info(url, download=False)
             
-            # If standard output template doesn't exactly match prepare_filename (can happen sometimes)
-            if not os.path.exists(filename):
-                filename = f"downloads/{file_id}.{info.get('ext', 'mp4')}"
-                
-        # Schedule cleanup
-        background_tasks.add_task(remove_file, filename)
+        # Find the requested format
+        target_format = next((f for f in info.get('formats', []) if f.get('format_id') == format_id), None)
+        if not target_format:
+            raise HTTPException(status_code=400, detail="Requested format not found.")
+            
+        video_url = target_format.get('url')
+        http_headers = target_format.get('http_headers', {})
         
-        client_filename = f"{info.get('title', 'video')}.{info.get('ext', 'mp4')}"
-        # Make filename safe
+        # Calculate file size if available for the download manager
+        filesize = target_format.get('filesize') or target_format.get('filesize_approx')
+        
+        # Prepare safe filename
+        client_filename = f"{info.get('title', 'video')}.{target_format.get('ext', 'mp4')}"
         client_filename = "".join([c for c in client_filename if c.isalpha() or c.isdigit() or c in (' ', '.', '-', '_')]).rstrip()
         
-        return FileResponse(
-            path=filename,
-            filename=client_filename,
-            media_type='application/octet-stream'
+        # Streaming generator
+        async def stream_generator():
+            async with AsyncSession(impersonate="chrome") as session:
+                # We stream the content from YouTube directly to the client's browser
+                response = await session.get(video_url, headers=http_headers, stream=True)
+                async for chunk in response.aiter_content(chunk_size=65536):
+                    if chunk:
+                        yield chunk
+
+        # Build response headers
+        headers = {
+            'Content-Disposition': f'attachment; filename="{client_filename}"',
+        }
+        if filesize:
+            headers['Content-Length'] = str(filesize)
+
+        return StreamingResponse(
+            stream_generator(),
+            media_type='application/octet-stream',
+            headers=headers
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
