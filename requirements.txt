@@ -1,4 +1,5 @@
 fastapi
 uvicorn
-yt-dlp
+yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master
+curl-cffi
 pydantic

@@ -35,6 +35,7 @@ async def get_qualities(req: VideoRequest):
     ydl_opts = {
         'skip_download': True,
         'quiet': True,
+        'impersonate': 'chrome',
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -97,6 +98,7 @@ async def download_video(req: DownloadRequest, background_tasks: BackgroundTasks
         'format': req.format_id,
         'outtmpl': outtmpl,
         'quiet': True,
+        'impersonate': 'chrome',
     }
 
     try:
