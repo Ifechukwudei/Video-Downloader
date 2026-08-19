@@ -89,14 +89,14 @@ async def get_qualities(req: VideoRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/download")
-async def download_video(req: DownloadRequest, background_tasks: BackgroundTasks):
+@app.get("/api/download")
+async def download_video(url: str, format_id: str, background_tasks: BackgroundTasks):
     os.makedirs("downloads", exist_ok=True)
     file_id = str(uuid.uuid4())
     outtmpl = f"downloads/{file_id}.%(ext)s"
     
     ydl_opts = {
-        'format': req.format_id,
+        'format': format_id,
         'outtmpl': outtmpl,
         'quiet': True,
         'impersonate': ImpersonateTarget.from_str('chrome'),
@@ -104,7 +104,7 @@ async def download_video(req: DownloadRequest, background_tasks: BackgroundTasks
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(req.url, download=True)
+            info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             
             # If standard output template doesn't exactly match prepare_filename (can happen sometimes)

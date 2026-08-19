@@ -164,58 +164,27 @@
             }
         }
 
-        async function downloadVideo() {
+        function downloadVideo() {
             const url = document.getElementById('urlInput').value.trim();
             const format_id = document.getElementById('formatSelect').value;
 
+            if (!url || !format_id) return;
+            
             document.getElementById('downloadBtn').disabled = true;
             document.getElementById('downloadLoader').style.display = 'block';
             document.getElementById('errorMsg').style.display = 'none';
 
-            try {
-                const res = await fetch('/api/download', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, format_id })
-                });
-
-                if (!res.ok) {
-                    let errorMessage = 'Download failed';
-                    try {
-                        const data = await res.json();
-                        errorMessage = data.detail || errorMessage;
-                    } catch(e) {}
-                    throw new Error(errorMessage);
-                }
-
-                // Handle binary file download
-                const blob = await res.blob();
-                const downloadUrl = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                
-                // Try to get filename from Content-Disposition header
-                const disposition = res.headers.get('Content-Disposition');
-                let filename = 'video.mp4';
-                if (disposition && disposition.indexOf('filename=') !== -1) {
-                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
-                    if (matches != null && matches[1]) {
-                        filename = matches[1].replace(/['"]/g, '');
-                    }
-                }
-                
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(downloadUrl);
-            } catch (err) {
-                document.getElementById('errorMsg').textContent = err.message;
-                document.getElementById('errorMsg').style.display = 'block';
-            } finally {
+            // Build the URL with query parameters
+            const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&format_id=${encodeURIComponent(format_id)}`;
+            
+            // Trigger standard browser download
+            window.location.href = downloadUrl;
+            
+            // Re-enable button after a short delay since we can't perfectly track when the file starts downloading
+            setTimeout(() => {
                 document.getElementById('downloadBtn').disabled = false;
                 document.getElementById('downloadLoader').style.display = 'none';
-            }
+            }, 3000);
         }
     </script>
 </body>
