@@ -1,5 +1,5 @@
 fastapi
 uvicorn
 yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master
-curl-cffi
+curl-cffi<0.16
 pydantic

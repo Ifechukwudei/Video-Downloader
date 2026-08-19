@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 import yt_dlp
+from yt_dlp.networking.impersonate import ImpersonateTarget
 import os
 import uuid
 
@@ -35,7 +36,7 @@ async def get_qualities(req: VideoRequest):
     ydl_opts = {
         'skip_download': True,
         'quiet': True,
-        'impersonate': 'chrome',
+        'impersonate': ImpersonateTarget.from_str('chrome'),
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -98,7 +99,7 @@ async def download_video(req: DownloadRequest, background_tasks: BackgroundTasks
         'format': req.format_id,
         'outtmpl': outtmpl,
         'quiet': True,
-        'impersonate': 'chrome',
+        'impersonate': ImpersonateTarget.from_str('chrome'),
     }
 
     try:
