@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Downloader</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f4f4f9; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+            color: #333;
+        }
+        .container { 
+            background: white; 
+            padding: 2.5rem; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1); 
+            width: 100%; 
+            max-width: 500px; 
+            text-align: center; 
+            box-sizing: border-box;
+        }
+        h1 { margin-top: 0; margin-bottom: 1.5rem; }
+        .input-group { margin-bottom: 1rem; }
+        input[type="text"] { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid #ddd; 
+            border-radius: 6px; 
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        button { 
+            background-color: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 12px 20px; 
+            cursor: pointer; 
+            border-radius: 6px; 
+            width: 100%; 
+            font-size: 16px; 
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .loader { 
+            border: 4px solid #f3f3f3; 
+            border-top: 4px solid #007bff; 
+            border-radius: 50%; 
+            width: 30px; 
+            height: 30px; 
+            animation: spin 1s linear infinite; 
+            margin: 15px auto; 
+            display: none; 
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #results { 
+            margin-top: 25px; 
+            display: none; 
+            text-align: left; 
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        #videoTitle {
+            margin-top: 0;
+            font-size: 1.1rem;
+            line-height: 1.4;
+        }
+        select { 
+            width: 100%; 
+            padding: 12px; 
+            margin-bottom: 15px; 
+            border: 1px solid #ddd; 
+            border-radius: 6px; 
+            font-size: 15px;
+            box-sizing: border-box;
+        }
+        .error { 
+            color: #dc3545; 
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 15px; 
+            display: none; 
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Video Downloader</h1>
+        
+        <div class="input-group">
+            <input type="text" id="urlInput" placeholder="Enter video URL (e.g. YouTube)">
+        </div>
+        
+        <button id="fetchBtn" onclick="fetchQualities()">Fetch Video</button>
+        <div class="loader" id="loader"></div>
+        <div class="error" id="errorMsg"></div>
+
+        <div id="results">
+            <h3 id="videoTitle"></h3>
+            <select id="formatSelect"></select>
+            <button id="downloadBtn" onclick="downloadVideo()">Download</button>
+            <div class="loader" id="downloadLoader"></div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchQualities() {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) return;
+
+            // UI Reset
+            document.getElementById('fetchBtn').disabled = true;
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('errorMsg').style.display = 'none';
+
+            try {
+                const res = await fetch('/api/get-qualities', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                const data = await res.json();
+                
+                if (!res.ok) throw new Error(data.detail || 'Failed to fetch video qualities');
+
+                document.getElementById('videoTitle').textContent = data.title;
+                const select = document.getElementById('formatSelect');
+                select.innerHTML = '';
+                
+                if (data.formats.length === 0) {
+                    throw new Error('No compatible video formats found');
+                }
+
+                data.formats.forEach(f => {
+                    const option = document.createElement('option');
+                    option.value = f.format_id;
+                    const noteStr = f.note ? ` (${f.note})` : '';
+                    option.textContent = `${f.resolution} - ${f.ext}${noteStr}`;
+                    select.appendChild(option);
+                });
+
+                document.getElementById('results').style.display = 'block';
+            } catch (err) {
+                document.getElementById('errorMsg').textContent = err.message;
+                document.getElementById('errorMsg').style.display = 'block';
+            } finally {
+                document.getElementById('fetchBtn').disabled = false;
+                document.getElementById('loader').style.display = 'none';
+            }
+        }
+
+        async function downloadVideo() {
+            const url = document.getElementById('urlInput').value.trim();
+            const format_id = document.getElementById('formatSelect').value;
+
+            document.getElementById('downloadBtn').disabled = true;
+            document.getElementById('downloadLoader').style.display = 'block';
+            document.getElementById('errorMsg').style.display = 'none';
+
+            try {
+                const res = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, format_id })
+                });
+
+                if (!res.ok) {
+                    let errorMessage = 'Download failed';
+                    try {
+                        const data = await res.json();
+                        errorMessage = data.detail || errorMessage;
+                    } catch(e) {}
+                    throw new Error(errorMessage);
+                }
+
+                // Handle binary file download
+                const blob = await res.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                
+                // Try to get filename from Content-Disposition header
+                const disposition = res.headers.get('Content-Disposition');
+                let filename = 'video.mp4';
+                if (disposition && disposition.indexOf('filename=') !== -1) {
+                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+                
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(downloadUrl);
+            } catch (err) {
+                document.getElementById('errorMsg').textContent = err.message;
+                document.getElementById('errorMsg').style.display = 'block';
+            } finally {
+                document.getElementById('downloadBtn').disabled = false;
+                document.getElementById('downloadLoader').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
